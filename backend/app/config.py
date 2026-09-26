@@ -1,8 +1,15 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_ROOT_ENV = Path(__file__).resolve().parents[2] / ".env"
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=_ROOT_ENV if _ROOT_ENV.is_file() else None,
+        extra="ignore",
+    )
 
     mysql_host: str = "mysql"
     mysql_port: int = 3306
