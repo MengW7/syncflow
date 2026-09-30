@@ -76,7 +76,89 @@ npm run dev
 在进程对应终端中Ctrl+C
 
 ### 7. 数据库迁移
-
+#### Linux
+- 启动MYSQL：
+```
+docker compose up -d mysql
+chmod +x scripts/migrate.sh
+```
+- 开发库迁移：
+```
+./scripts/migrate.sh
+```
+为脚本赋予可执行权限后直接运行。不传参数时会自动使用默认库名 syncflow，将 scripts/init_db.sql 应用到本地开发库。
+- 测试库迁移：
+```
+./scripts/migrate.sh --test
+```
+跑自动化测试或集成测试时，避免脏数据污染日常开发库。
+- 需要迁移到其他库名时显示传参：
+```
+./scripts/migrate.sh other_db–
+```
+#### Windows
+- 迁移主库，根目录下运行：
+```
+# 迁移主库 syncflow
+powershell -ExecutionPolicy Bypass -File .\scripts\migrate.ps1
+```
+建测试库：
+```
+# 建测试库 syncflow_test 并灌表
+powershell -ExecutionPolicy Bypass -File .\scripts\migrate.ps1 -Test
+```
+#### 查看库是否正确创建
+- 两个库是否在：
+```
+docker compose exec -T mysql mysql `
+  --user=$env:MYSQL_USER `
+  --password=$env:MYSQL_PASSWORD `
+  --host=127.0.0.1 `
+  -e "SHOW DATABASES;"
+```
+列表里应有 syncflow 和 syncflow_test。
+- 库中表是否对齐：
+```
+docker compose exec -T mysql mysql `
+  --user=$env:MYSQL_USER `
+  --password=$env:MYSQL_PASSWORD `
+  --host=127.0.0.1 `
+  -e "SHOW TABLES FROM $env:MYSQL_DATABASE; SHOW TABLES FROM $env:MYSQL_TEST_DATABASE;"
+```
+每个库都应有且只有：sync_jobs、sync_records、sync_errors
+- 表结构和约束：
+```
+docker compose exec -T mysql mysql `
+  --user=$env:MYSQL_USER `
+  --password=$env:MYSQL_PASSWORD `
+  --host=127.0.0.1 `
+  $env:MYSQL_DATABASE `
+  -e "SHOW CREATE TABLE sync_jobs\G; SHOW CREATE TABLE sync_records\G; SHOW CREATE TABLE sync_errors\G;"
+```
+对照检查：
+| 对象 | 应该看到 |
+| :--- | :--- |
+| `sync_jobs` | 主键 `id`；索引 `(status, created_at)`、`(created_at)` |
+| `sync_records` | `amount` 为 `decimal(12,2)`；`UNIQUE (job_id, external_id)` |
+| `sync_errors` | 索引 `(job_id, row_number)`；`raw_row` 为 `json` |
+| 字符集 | `DEFAULT CHARSET=utf8mb4` |
+- 账号权限：
+```
+docker compose exec -T mysql mysql `
+  --user=root `
+  --password=$env:MYSQL_ROOT_PASSWORD `
+  --host=127.0.0.1 `
+  -e "SHOW GRANTS FOR '$($env:MYSQL_USER)'@'%';"
+```
+里面应有对 syncflow 和 `syncflow_test` 的授权。
+- 迁移是否可重复，再运行一次：
+```
+powershell -ExecutionPolicy Bypass -File .\scripts\migrate.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\migrate.ps1 -Test
+# Linux运行下面的命令
+# ./scripts/migrate.sh
+# ./scripts/migrate.sh --test
+两次都应打印 migrated: syncflow / migrated: syncflow_test。然后再执行第 2 步，表还是那三张，没有多出奇怪的表。
 
 ### 8. 前端构建
 终端中运行：
@@ -91,7 +173,6 @@ npm run dev
 ```
 # API 探活
 curl.exe http://127.0.0.1:8000/healthz
-
 # 后端
 cd backend
 .\.venv\Scripts\Activate.ps1

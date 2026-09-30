@@ -1,12 +1,13 @@
 services:
   mysql:
-    image: mysql:8.4
+    image: mysql:8.0
     command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-      MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_TEST_DATABASE: ${MYSQL_TEST_DATABASE}
     ports:
       - "3306:3306"
     volumes:
@@ -30,7 +31,11 @@ services:
   api:
     build:
       context: ./backend
+    image: syncflow-backend
     env_file: .env
+    environment:
+      MYSQL_HOST: mysql
+      REDIS_ADDR: redis:6379
     ports:
       - "8000:8000"
     volumes:
@@ -44,9 +49,11 @@ services:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   worker:
-    build:
-      context: ./backend
+    image: syncflow-backend
     env_file: .env
+    environment:
+      MYSQL_HOST: mysql
+      REDIS_ADDR: redis:6379
     volumes:
       - ./backend:/app
       - ./uploads:/data/uploads
@@ -69,6 +76,7 @@ services:
       - api
     environment:
       - CHOKIDAR_USEPOLLING=true
+      - API_PROXY_TARGET=http://api:8000
 
 volumes:
   mysql_data:
