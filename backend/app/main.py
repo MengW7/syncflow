@@ -1,18 +1,33 @@
+import logging
 import threading
 import time
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-import pymysql
 import redis
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.config import settings
+from app.api.responses import fail
+from app.core.config import settings
+from app.core.errors import AppError
+from app.db.health import mysql_status
+from app.db.session import engine
+
+logger = logging.getLogger(__name__)
 
 _CHECK_TIMEOUT_SECONDS = 2
 
-app = FastAPI(title="SyncFlow API", version="0.1.0")
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    yield
+    engine.dispose()
+
+
+app = FastAPI(title="SyncFlow API", version="0.1.0", lifespan=_lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -23,26 +38,39 @@ app.add_middleware(
 )
 
 
-def _mysql_status() -> str:
-    try:
-        conn = pymysql.connect(
-            host=settings.mysql_host,
-            port=settings.mysql_port,
-            user=settings.mysql_user,
-            password=settings.mysql_password,
-            database=settings.mysql_database,
-            connect_timeout=_CHECK_TIMEOUT_SECONDS,
-            read_timeout=_CHECK_TIMEOUT_SECONDS,
-            write_timeout=_CHECK_TIMEOUT_SECONDS,
-        )
-        try:
-            with conn.cursor() as cursor:
-                cursor.execute("SELECT 1")
-        finally:
-            conn.close()
-        return "ok"
-    except Exception:
-        return "unavailable"
+# 捕获自定义领域异常 AppError
+@app.exception_handler(AppError)
+async def app_error_handler(request: Request, exc: AppError):
+    return JSONResponse(
+        status_code=exc.http_status,
+        content=fail(code=exc.code, message=exc.message, details=exc.details),
+    )
+
+
+# 捕获请求验证错误
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=400,
+        content=fail(
+            code="INVALID_REQUEST",
+            message="请求参数验证失败",
+            details=exc.errors(),
+        ),
+    )
+
+
+# 捕获未处理的异常
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled server error: %s", exc)
+    return JSONResponse(
+        status_code=500,
+        content=fail(
+            code="INTERNAL_ERROR",
+            message="服务器内部错误",
+        ),
+    )
 
 
 def _redis_status() -> str:
@@ -83,7 +111,10 @@ def healthz():
 
 
 def _dependency_checks() -> dict[str, str]:
-    probes = {"mysql": _mysql_status, "redis": _redis_status}
+    probes = {
+        "mysql": lambda: mysql_status(_CHECK_TIMEOUT_SECONDS),
+        "redis": _redis_status,
+    }
     results: dict[str, str | None] = {name: None for name in probes}
 
     def run(name: str, probe) -> None:
