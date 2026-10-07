@@ -54,13 +54,20 @@ class JobService:
         source_file_name, stored_file_path, file_sha256 = save_upload_file(file, job_id)
 
         # 6. repo.create(...)，初始 status=PENDING
-        created_row = self.repo.create({
-            "id": job_id,
-            "name": job_name,
-            "source_file_name": source_file_name,
-            "stored_file_path": stored_file_path,
-            "file_sha256": file_sha256,
-        })
+        try:
+            created_row = self.repo.create({
+                "id": job_id,
+                "name": job_name,
+                "source_file_name": source_file_name,
+                "stored_file_path": stored_file_path,
+                "file_sha256": file_sha256,
+            })
+        except Exception:
+            Path(stored_file_path).unlink(missing_ok=True)
+            raise
+        if created_row is None:
+            Path(stored_file_path).unlink(missing_ok=True)
+            raise RuntimeError("创建任务后未能读取记录")
 
         # 7. queue.enqueue(job_id)，失败则 repo.mark_failed(...)
         try:

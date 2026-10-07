@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.responses import fail
+from app.api.router import api_router
 from app.core.config import settings
 from app.core.errors import AppError
 from app.db.health import mysql_status
@@ -28,6 +29,7 @@ async def _lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="SyncFlow API", version="0.1.0", lifespan=_lifespan)
+app.include_router(api_router)
 
 app.add_middleware(
     CORSMiddleware,

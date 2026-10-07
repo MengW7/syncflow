@@ -53,7 +53,7 @@ class FileTooLarge(AppError):
         super().__init__(
             code=ErrorCode.FILE_TOO_LARGE,
             message=message,
-            http_status=413,
+            http_status=400,
             details=details,
         )
 
