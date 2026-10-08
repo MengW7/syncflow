@@ -41,14 +41,15 @@ class JobService:
         # 3. 生成 job_id（全局统一 UUID 36位）
         job_id = str(uuid.uuid4())
 
-        # 4. 生成 / 截断 name (<=128; 空则例如 导入-{原始文件名去扩展}-{YYYY-MM-DD})
+        # 4. 名称最长 128。用户传入超长则拒绝；未传时生成，过长再截断以匹配字段长度。
         base_name = Path(raw_filename).stem
         if not name or not name.strip():
             today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            job_name = f"导入-{base_name}-{today_str}"
+            job_name = f"导入-{base_name}-{today_str}"[:128]
         else:
             job_name = name.strip()
-        job_name = job_name[:128]
+            if len(job_name) > 128:
+                raise InvalidRequest("任务名称最长 128 个字符")
 
         # 5. 流式保存文件 + 校验大小 + 算 sha256（超限会抛 FileTooLarge 并自动删残余文件）
         source_file_name, stored_file_path, file_sha256 = save_upload_file(file, job_id)

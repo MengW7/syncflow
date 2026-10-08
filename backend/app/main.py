@@ -49,6 +49,20 @@ async def app_error_handler(request: Request, exc: AppError):
     )
 
 
+def _validation_details(exc: RequestValidationError) -> list[dict[str, str]]:
+    details: list[dict[str, str]] = []
+    for err in exc.errors():
+        loc = err.get("loc") or ()
+        details.append(
+            {
+                "loc": ".".join(str(part) for part in loc),
+                "msg": str(err.get("msg") or ""),
+                "type": str(err.get("type") or ""),
+            }
+        )
+    return details
+
+
 # 捕获请求验证错误
 @app.exception_handler(RequestValidationError)
 async def validation_error_handler(request: Request, exc: RequestValidationError):
@@ -57,15 +71,15 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
         content=fail(
             code="INVALID_REQUEST",
             message="请求参数验证失败",
-            details=exc.errors(),
+            details=_validation_details(exc),
         ),
     )
 
 
-# 捕获未处理的异常
+# 捕获未处理的异常。响应只给错误码，不返回异常文本或堆栈。
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    logger.exception("Unhandled server error: %s", exc)
+    logger.error("unhandled error type=%s", type(exc).__name__)
     return JSONResponse(
         status_code=500,
         content=fail(
