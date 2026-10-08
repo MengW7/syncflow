@@ -133,7 +133,7 @@ class JobRepository:
             SET status = 'SUCCESS',
                 finished_at = :finished_at,
                 updated_at = :updated_at
-            WHERE id = :job_id
+            WHERE id = :job_id AND status = 'RUNNING'
         """)
 
         with self.engine.begin() as conn:
