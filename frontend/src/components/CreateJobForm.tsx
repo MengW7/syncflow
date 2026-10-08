@@ -12,6 +12,8 @@ export function CreateJobForm({ onCreated }: { onCreated: (job: JobCreated) => v
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // React clears currentTarget when this handler returns, which happens at the first await.
+    const form = event.currentTarget;
     if (!file) {
       setError("请选择 CSV 文件");
       return;
@@ -22,7 +24,7 @@ export function CreateJobForm({ onCreated }: { onCreated: (job: JobCreated) => v
       const result = await createJob(file, name);
       setName("");
       setFile(null);
-      event.currentTarget.reset();
+      form.reset();
       onCreated(result.data);
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "创建失败");
