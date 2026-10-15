@@ -1,6 +1,6 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.engine import Engine
 
 
@@ -152,7 +152,8 @@ class JobRepository:
         finished_at: Optional[datetime] = None,
     ) -> bool:
         """
-        入队失败或 Worker 失败时更新错误信息
+        入队失败或 Worker 失败时更新错误信息。
+        只改 PENDING / RUNNING，已终态的统计和说明保持原样。
         """
         now = _utcnow()
         finish_time = finished_at or now
@@ -164,7 +165,7 @@ class JobRepository:
                 last_error_message = :message,
                 finished_at = :finished_at,
                 updated_at = :updated_at
-            WHERE id = :job_id
+            WHERE id = :job_id AND status IN ('PENDING', 'RUNNING')
         """)
 
         with self.engine.begin() as conn:
@@ -176,6 +177,37 @@ class JobRepository:
                 "updated_at": now,
             })
             return res.rowcount > 0
+
+    def reclaim_stale_running(self, timeout_seconds: int) -> list[str]:
+        """把超时仍停在 RUNNING 的任务标为 FAILED。返回被回收的任务 id。"""
+        if timeout_seconds < 0:
+            raise ValueError("timeout_seconds 不能为负")
+        now = _utcnow()
+        deadline = now - timedelta(seconds=timeout_seconds)
+        select_query = text("""
+            SELECT id FROM sync_jobs
+            WHERE status = 'RUNNING'
+              AND (started_at IS NULL OR started_at < :deadline)
+        """)
+        update_query = text("""
+            UPDATE sync_jobs
+            SET status = 'FAILED',
+                last_error_code = 'INTERNAL_ERROR',
+                last_error_message = '任务处理超时',
+                finished_at = :finished_at,
+                updated_at = :updated_at
+            WHERE id IN :ids AND status = 'RUNNING'
+        """).bindparams(bindparam("ids", expanding=True))
+        with self.engine.begin() as conn:
+            ids = [row[0] for row in conn.execute(select_query, {"deadline": deadline})]
+            if not ids:
+                return []
+            conn.execute(update_query, {
+                "ids": ids,
+                "finished_at": now,
+                "updated_at": now,
+            })
+            return ids
 
     def finish_import(
         self,

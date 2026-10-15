@@ -1,0 +1,43 @@
+name: DeepSeek PR Review
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  review:
+    if: >-
+      github.event.issue.pull_request &&
+      github.event.comment.body == '/review' &&
+      github.event.comment.author_association == 'OWNER'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Review with DeepSeek
+        uses: the-pr-agent/pr-agent@main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEEPSEEK.KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+
+          config.model: "deepseek/deepseek-v4-flash"
+          config.fallback_models: '["deepseek/deepseek-v4-flash"]'
+          config.model_weak: "deepseek/deepseek-v4-flash"
+          config.restricted_mode: "true"
+          config.reasoning_effort: "high"
+
+          github_action_config.auto_review: "false"
+          github_action_config.auto_describe: "false"
+          github_action_config.auto_improve: "false"
+
+          pr_reviewer.extra_instructions: >-
+            使用简体中文回复。
+            优先检查实际功能缺陷、异常处理、数据库事务、
+            批量写入、任务状态及统计一致性。
+            区分已确认的问题与需要核实的风险。
+            不要只给出代码风格建议。
