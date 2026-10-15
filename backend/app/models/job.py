@@ -4,11 +4,12 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 
-# 任务状态枚举（仅包含本周要求的 4 种状态白名单）
+# 任务状态白名单。列表筛选只接受这些值。
 class JobStatus(str, Enum):
     PENDING = "PENDING"
     RUNNING = "RUNNING"
     SUCCESS = "SUCCESS"
+    PARTIAL_SUCCESS = "PARTIAL_SUCCESS"
     FAILED = "FAILED"
 
 

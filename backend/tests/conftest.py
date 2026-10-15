@@ -1,8 +1,9 @@
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 
 from app.api.deps import get_job_service
 from app.core.config import settings
@@ -13,6 +14,44 @@ from app.services.job_service import JobService
 from app.services.queue import queue_service
 
 TEST_QUEUE_KEY = "syncflow:jobs:test"
+
+
+def delete_pytest_jobs(conn, *, name_like: str = "pytest-%", extra_ids: Sequence[str] = ()) -> None:
+    """删掉测试任务，以及它们在 sync_records / sync_errors 里的行。"""
+    params = {"name_like": name_like}
+    conn.execute(
+        text(
+            """
+            DELETE FROM sync_records
+            WHERE job_id IN (SELECT id FROM sync_jobs WHERE name LIKE :name_like)
+            """
+        ),
+        params,
+    )
+    conn.execute(
+        text(
+            """
+            DELETE FROM sync_errors
+            WHERE job_id IN (SELECT id FROM sync_jobs WHERE name LIKE :name_like)
+            """
+        ),
+        params,
+    )
+    if extra_ids:
+        id_stmt = text("DELETE FROM sync_records WHERE job_id IN :ids").bindparams(
+            bindparam("ids", expanding=True)
+        )
+        error_stmt = text("DELETE FROM sync_errors WHERE job_id IN :ids").bindparams(
+            bindparam("ids", expanding=True)
+        )
+        job_stmt = text("DELETE FROM sync_jobs WHERE id IN :ids").bindparams(
+            bindparam("ids", expanding=True)
+        )
+        id_params = {"ids": list(extra_ids)}
+        conn.execute(id_stmt, id_params)
+        conn.execute(error_stmt, id_params)
+        conn.execute(job_stmt, id_params)
+    conn.execute(text("DELETE FROM sync_jobs WHERE name LIKE :name_like"), params)
 
 
 @pytest.fixture
@@ -43,5 +82,5 @@ def api(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     app.dependency_overrides.clear()
     queue_service.client.delete(TEST_QUEUE_KEY)
     with test_engine.begin() as conn:
-        conn.execute(text("DELETE FROM sync_jobs WHERE name LIKE 'pytest-%'"))
+        delete_pytest_jobs(conn)
     test_engine.dispose()

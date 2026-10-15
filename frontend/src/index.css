@@ -223,6 +223,7 @@ select {
 .status-pending { color: #92400e; }
 .status-running { color: #1d4ed8; }
 .status-success { color: #047857; }
+.status-partial_success { color: #6d28d9; }
 .status-failed { color: #be123c; }
 .status-unknown { color: var(--muted); }
 
@@ -230,6 +231,7 @@ select {
   .status-pending { color: #fbbf24; }
   .status-running { color: #93c5fd; }
   .status-success { color: #6ee7b7; }
+  .status-partial_success { color: #c4b5fd; }
   .status-failed { color: #fda4af; }
 }
 

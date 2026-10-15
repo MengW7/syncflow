@@ -9,7 +9,7 @@ from app.main import app
 from app.repositories.job_repo import JobRepository
 from app.services.job_service import JobService
 from app.services.queue import queue_service
-from tests.conftest import TEST_QUEUE_KEY
+from tests.conftest import TEST_QUEUE_KEY, delete_pytest_jobs
 
 
 def post_csv(client, filename="items.csv", content=b"a,b\n1,2\n", name="pytest-create"):
@@ -135,10 +135,7 @@ def test_list_pagination_boundaries(api):
         "c": "2099-01-03 00:00:00.000",
     }
     with test_engine.begin() as conn:
-        conn.execute(
-            text("DELETE FROM sync_jobs WHERE id IN (:a, :b, :c) OR name LIKE 'pytest-page-%'"),
-            {"a": ids["a"], "b": ids["b"], "c": ids["c"]},
-        )
+        delete_pytest_jobs(conn, name_like="pytest-page-%", extra_ids=tuple(ids.values()))
         for key, job_id in ids.items():
             conn.execute(
                 text(
@@ -189,10 +186,22 @@ def test_list_pagination_boundaries(api):
 
     with test_engine.begin() as conn:
         conn.execute(text("UPDATE sync_jobs SET status = 'SUCCESS' WHERE id = :id"), {"id": ids["c"]})
+        conn.execute(
+            text("UPDATE sync_jobs SET status = 'PARTIAL_SUCCESS' WHERE id = :id"),
+            {"id": ids["b"]},
+        )
     filtered = client.get("/api/v1/jobs", params={"status": "SUCCESS", "page_size": 100})
     filtered_ids = [item["id"] for item in filtered.json()["data"]]
     assert ids["c"] in filtered_ids
     assert ids["a"] not in filtered_ids
+    assert ids["b"] not in filtered_ids
+
+    partial = client.get("/api/v1/jobs", params={"status": "PARTIAL_SUCCESS", "page_size": 100})
+    assert partial.status_code == 200
+    partial_ids = [item["id"] for item in partial.json()["data"]]
+    assert partial_ids.count(ids["b"]) == 1
+    assert ids["a"] not in partial_ids
+    assert ids["c"] not in partial_ids
 
     assert client.get("/api/v1/jobs", params={"page": 0}).status_code == 400
     assert client.get("/api/v1/jobs", params={"page_size": 101}).status_code == 400

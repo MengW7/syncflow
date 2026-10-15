@@ -8,7 +8,7 @@ import { JOB_STATUS_LABEL, StatusBadge } from "../components/StatusBadge";
 import { formatLocalTime } from "../format";
 
 const PAGE_SIZE = 20;
-const STATUS_OPTIONS = ["", "PENDING", "RUNNING", "SUCCESS", "FAILED"] as const;
+const STATUS_OPTIONS = ["", "PENDING", "RUNNING", "SUCCESS", "PARTIAL_SUCCESS", "FAILED"] as const;
 
 function readPage(value: string | null): number | null {
   if (!value) {

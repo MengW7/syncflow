@@ -1,4 +1,4 @@
-export type JobStatus = "PENDING" | "RUNNING" | "SUCCESS" | "FAILED";
+export type JobStatus = "PENDING" | "RUNNING" | "SUCCESS" | "PARTIAL_SUCCESS" | "FAILED";
 
 export type JobListItem = {
   id: string;
