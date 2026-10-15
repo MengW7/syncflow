@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.deps import get_job_service
 from app.api.responses import ok
+from app.models.error import ErrorListQuery
 from app.models.job import JobListQuery
 from app.services.job_service import JobService
 
@@ -41,3 +42,16 @@ def get_job(
 ) -> JSONResponse:
     detail = service.get_job(job_id)
     return JSONResponse(status_code=200, content=ok(detail.model_dump(mode="json")))
+
+
+@router.get("/jobs/{job_id}/errors")
+def list_job_errors(
+    job_id: str,
+    query: Annotated[ErrorListQuery, Query()],
+    service: JobService = Depends(get_job_service),
+) -> JSONResponse:
+    items, meta = service.list_job_errors(job_id, page=query.page, page_size=query.page_size)
+    return JSONResponse(
+        status_code=200,
+        content=ok([item.model_dump(mode="json") for item in items], meta.model_dump()),
+    )
