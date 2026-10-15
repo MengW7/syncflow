@@ -176,3 +176,44 @@ class JobRepository:
                 "updated_at": now,
             })
             return res.rowcount > 0
+
+    def finish_import(
+        self,
+        conn,
+        job_id: str,
+        *,
+        status: str,
+        total_records: int,
+        success_records: int,
+        failed_records: int,
+        last_error_code: Optional[str] = None,
+        last_error_message: Optional[str] = None,
+        finished_at: Optional[datetime] = None,
+    ) -> bool:
+        """在调用方的事务里写入终态。计数、状态和 finished_at 同一次更新。"""
+        now = _utcnow()
+        finish_time = finished_at or now
+        query = text("""
+            UPDATE sync_jobs
+            SET status = :status,
+                total_records = :total_records,
+                success_records = :success_records,
+                failed_records = :failed_records,
+                last_error_code = :last_error_code,
+                last_error_message = :last_error_message,
+                finished_at = :finished_at,
+                updated_at = :updated_at
+            WHERE id = :job_id AND status = 'RUNNING'
+        """)
+        res = conn.execute(query, {
+            "job_id": job_id,
+            "status": status,
+            "total_records": total_records,
+            "success_records": success_records,
+            "failed_records": failed_records,
+            "last_error_code": last_error_code,
+            "last_error_message": last_error_message,
+            "finished_at": finish_time,
+            "updated_at": now,
+        })
+        return res.rowcount > 0
