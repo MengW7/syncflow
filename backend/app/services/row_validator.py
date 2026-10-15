@@ -197,6 +197,9 @@ def _parse_amount(text: str) -> tuple[Decimal | None, str | None]:
     fraction = matched.group(1) or ""
     if len(fraction) > 2:
         return None, "amount 最多两位小数"
+    integer_part = text.split(".", 1)[0].lstrip("0") or "0"
+    if len(integer_part) > 10:
+        return None, "amount 超出范围"
     amount = Decimal(text).quantize(_CENT)
     if amount > _MAX_AMOUNT:
         return None, "amount 超出范围"
