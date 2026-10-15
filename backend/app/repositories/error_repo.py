@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from sqlalchemy import text
+from sqlalchemy.engine import Engine
 
 _INSERT = text("""
     INSERT INTO sync_errors (
@@ -48,6 +49,36 @@ class ErrorRepository:
             }
             for error in errors
         ])
+
+    def list_for_job(
+        self,
+        engine: Engine,
+        job_id: str,
+        *,
+        page: int,
+        page_size: int,
+    ) -> list[dict]:
+        """按行号、id 升序分页。空行号排在有行号的记录前面。"""
+        offset = (page - 1) * page_size
+        query = text("""
+            SELECT job_id, `row_number`, field_name, error_code, error_message, raw_row, created_at
+            FROM sync_errors
+            WHERE job_id = :job_id
+            ORDER BY `row_number` ASC, id ASC
+            LIMIT :limit OFFSET :offset
+        """)
+        with engine.connect() as conn:
+            rows = conn.execute(query, {
+                "job_id": job_id,
+                "limit": page_size,
+                "offset": offset,
+            }).mappings().all()
+        return [dict(row) for row in rows]
+
+    def count_for_job(self, engine: Engine, job_id: str) -> int:
+        query = text("SELECT COUNT(*) FROM sync_errors WHERE job_id = :job_id")
+        with engine.connect() as conn:
+            return conn.execute(query, {"job_id": job_id}).scalar() or 0
 
 
 def _json_or_none(raw_row: dict | None) -> str | None:

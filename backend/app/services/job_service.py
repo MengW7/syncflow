@@ -12,7 +12,9 @@ from app.core.errors import (
     InvalidRequest,
     JobNotFound,
 )
+from app.models.error import ErrorListMeta, JobError
 from app.models.job import JobCreatedData, JobDetail, JobListItem, JobListMeta
+from app.repositories.error_repo import ErrorRepository
 from app.repositories.job_repo import JobRepository
 from app.services.queue import queue_service
 from app.services.storage import save_upload_file
@@ -21,8 +23,9 @@ logger = logging.getLogger(__name__)
 
 
 class JobService:
-    def __init__(self, repo: JobRepository):
+    def __init__(self, repo: JobRepository, errors: ErrorRepository | None = None):
         self.repo = repo
+        self.errors = errors or ErrorRepository()
 
     def create_job(self, file: Optional[UploadFile], name: Optional[str] = None) -> JobCreatedData:
         """
@@ -114,4 +117,24 @@ class JobService:
 
         items = [JobListItem.model_validate(row) for row in rows]
         meta = JobListMeta(page=page, page_size=page_size, total=total)
+        return items, meta
+
+    def list_job_errors(
+        self,
+        job_id: str,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> Tuple[List[JobError], ErrorListMeta]:
+        """任务不存在时与详情接口一样返回 404。没有错误时返回空列表。"""
+        if not self.repo.get_by_id(job_id):
+            raise JobNotFound(f"任务不存在: {job_id}")
+        rows = self.errors.list_for_job(
+            self.repo.engine,
+            job_id,
+            page=page,
+            page_size=page_size,
+        )
+        total = self.errors.count_for_job(self.repo.engine, job_id)
+        items = [JobError.model_validate(row) for row in rows]
+        meta = ErrorListMeta(page=page, page_size=page_size, total=total)
         return items, meta
