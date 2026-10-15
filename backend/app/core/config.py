@@ -23,6 +23,8 @@ class Settings(BaseSettings):
 
     # 创建任务
     max_upload_file_size_mb: int = 10
+    # 单任务最大有效数据行。对应环境变量 MAX_RECORDS_PER_JOB。
+    max_records_per_job: int = 10000
     # 受控目录
     upload_dir: str = "/data/uploads"
     # Redis list
