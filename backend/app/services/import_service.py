@@ -4,6 +4,7 @@
 行级失败继续处理其它行。total = success + failed。
 """
 
+import logging
 from dataclasses import dataclass
 
 from sqlalchemy.engine import Engine
@@ -20,6 +21,7 @@ from app.repositories.record_repo import (
 from app.services.row_validator import ParsedCsv, parse_csv
 
 _MESSAGE_LIMIT = 512
+logger = logging.getLogger("syncflow.import")
 
 
 @dataclass(frozen=True)
@@ -56,13 +58,26 @@ class ImportService:
 
         parsed = parse_csv(job["stored_file_path"])
         if parsed.file_error is not None:
+            logger.info("job_id=%s file_error=%s", job_id, parsed.file_error.code.value)
             return self._finish_file_error(job_id, parsed)
 
-        written = self.records.insert_in_batches(job_id, parsed.accepted, batch_size=batch_size)
-        failed_rows = len({error.row_number for error in parsed.errors})
+        invalid_rows = len({error.row_number for error in parsed.errors})
+        total_rows = len(parsed.accepted) + invalid_rows
+        logger.info(
+            "job_id=%s rows=%s accepted=%s",
+            job_id,
+            total_rows,
+            len(parsed.accepted),
+        )
+        written = self.records.insert_in_batches(
+            job_id,
+            parsed.accepted,
+            batch_size=batch_size,
+            total_rows=total_rows,
+        )
         failed_in_batches = sum(failure.row_count for failure in written.failures)
         success = written.inserted_count
-        failed = failed_rows + failed_in_batches
+        failed = invalid_rows + failed_in_batches
         status = _terminal_status(success, failed)
         last_code, last_message = _batch_failure_summary(written.failures)
         self._finish(

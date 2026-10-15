@@ -1,6 +1,7 @@
 """把校验通过的行分批写入 sync_records。每批单独一个事务。"""
 
 import logging
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -53,24 +54,34 @@ class RecordRepository:
         rows: Sequence[ValidRow],
         *,
         batch_size: int = RECORD_BATCH_SIZE,
+        total_rows: int | None = None,
     ) -> BatchWriteResult:
         """按批提交。某一批冲突或写失败时只回滚该批，并留下批号和原因。"""
         if batch_size < 1:
             raise ValueError("batch_size 必须大于 0")
 
+        total = total_rows if total_rows is not None else len(rows)
         inserted_count = 0
+        processed = 0
         failures: list[BatchFailure] = []
         for batch_number, chunk in enumerate(_chunks(rows, batch_size), start=1):
+            started = time.perf_counter()
+            # csv_line 是文件行号（含表头）。data_rows 只计数据行，避免出现 row=3/2。
+            csv_line = chunk[-1].row_number
+            processed += len(chunk)
             try:
                 with self.engine.begin() as conn:
                     _insert_batch(conn, job_id, chunk)
             except SQLAlchemyError as exc:
                 # 原文含表名、索引名和键值，只写日志。调用方只看 reason。
                 logger.error(
-                    "job_id=%s batch=%s rows=%s db_error=%s",
+                    "job_id=%s batch=%s csv_line=%s data_rows=%s/%s result=failed elapsed_ms=%s db_error=%s",
                     job_id,
                     batch_number,
-                    len(chunk),
+                    csv_line,
+                    processed,
+                    total,
+                    _elapsed_ms(started),
                     _raw_db_error(exc),
                 )
                 failures.append(BatchFailure(
@@ -80,6 +91,15 @@ class RecordRepository:
                 ))
                 continue
             inserted_count += len(chunk)
+            logger.info(
+                "job_id=%s batch=%s csv_line=%s data_rows=%s/%s result=ok elapsed_ms=%s",
+                job_id,
+                batch_number,
+                csv_line,
+                processed,
+                total,
+                _elapsed_ms(started),
+            )
         return BatchWriteResult(inserted_count=inserted_count, failures=tuple(failures))
 
 
@@ -108,6 +128,10 @@ def _insert_batch(conn, job_id: str, rows: Sequence[ValidRow]) -> None:
         }
         for row in rows
     ])
+
+
+def _elapsed_ms(started: float) -> int:
+    return int((time.perf_counter() - started) * 1000)
 
 
 def _failure_reason(exc: SQLAlchemyError) -> str:

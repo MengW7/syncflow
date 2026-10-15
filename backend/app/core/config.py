@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     upload_dir: str = "/data/uploads"
     # Redis list
     job_queue_key: str = "syncflow:jobs"
+    # 启动时回收超过这个秒数仍停在 RUNNING 的任务。对应 JOB_TIMEOUT_SECONDS。
+    job_timeout_seconds: int = 300
 
     def mysql_dsn_for(self, database: str | None = None) -> str:
         user = quote_plus(self.mysql_user)

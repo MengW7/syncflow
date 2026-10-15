@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import date
 from decimal import Decimal
 
@@ -336,6 +337,37 @@ def _json_or_none(value):
     if value is None or isinstance(value, dict):
         return value
     return json.loads(value)
+
+
+def test_batch_log_separates_csv_line_from_data_row_progress(api, caplog):
+    """csv_line 是文件行号，data_rows 是已处理数据行/总数据行。"""
+    client, test_engine, _upload_dir = api
+    job_id = create_job(
+        client,
+        HEADER + "S001,商品A,19.90,2026-01-01\n",
+        "pytest-import-batch-log",
+    )
+    rows = [
+        ValidRow(2, "S001", "商品A", Decimal("19.90"), date(2026, 1, 1)),
+        ValidRow(3, "S002", "商品B", Decimal("19.90"), date(2026, 1, 2)),
+    ]
+
+    with caplog.at_level(logging.INFO, logger="syncflow.import"):
+        result = ImportService(test_engine).records.insert_in_batches(
+            job_id, rows, batch_size=1, total_rows=2,
+        )
+
+    assert result.inserted_count == 2
+    messages = [record.getMessage() for record in caplog.records if record.name == "syncflow.import"]
+    assert any(
+        f"job_id={job_id} batch=1 csv_line=2 data_rows=1/2 result=ok" in message
+        for message in messages
+    )
+    assert any(
+        f"job_id={job_id} batch=2 csv_line=3 data_rows=2/2 result=ok" in message
+        for message in messages
+    )
+    assert all(" row=" not in message for message in messages)
 
 
 def test_record_repository_keeps_earlier_batches_when_a_later_batch_conflicts(api):
