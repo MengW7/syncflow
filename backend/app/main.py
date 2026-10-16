@@ -28,7 +28,7 @@ async def _lifespan(_app: FastAPI):
     engine.dispose()
 
 
-app = FastAPI(title="SyncFlow API", version="0.1.0", lifespan=_lifespan)
+app = FastAPI(title="SyncFlow API", version="1.0.0", lifespan=_lifespan)
 app.include_router(api_router)
 
 app.add_middleware(

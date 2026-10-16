@@ -88,6 +88,27 @@ def test_create_rejects_invalid_parameters(api):
     assert leftover == 0
 
 
+def test_upload_accepts_exact_ten_megabytes_and_rejects_one_extra_byte(api):
+    client, _engine, upload_dir = api
+    assert settings.max_upload_file_size_mb == 10
+    limit = settings.max_upload_file_size_mb * 1024 * 1024
+    header = b"external_id,name,amount,record_date\n"
+    exact = header + b"x" * (limit - len(header))
+    assert len(exact) == limit
+
+    accepted = post_csv(client, content=exact, name="pytest-size-exact")
+    assert accepted.status_code == 201
+    stored = upload_dir / f"{accepted.json()['data']['id']}.csv"
+    assert stored.is_file()
+    assert stored.stat().st_size == limit
+
+    rejected = post_csv(client, content=exact + b"x", name="pytest-size-over")
+    assert rejected.status_code == 400
+    assert rejected.json()["error"]["code"] == "FILE_TOO_LARGE"
+    assert "Traceback" not in rejected.text
+    assert list(upload_dir.glob("*.csv")) == [stored]
+
+
 def test_create_rejects_oversize_file(api, monkeypatch):
     client, _engine, upload_dir = api
     monkeypatch.setattr(settings, "max_upload_file_size_mb", 0)
