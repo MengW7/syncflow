@@ -1,4 +1,4 @@
-import type { Envelope, JobCreated, JobDetail, JobListItem, PageMeta } from "./types";
+import type { Envelope, JobCreated, JobDetail, JobError, JobListItem, PageMeta } from "./types";
 
 export class ApiError extends Error {
   status: number;
@@ -53,6 +53,17 @@ export function listJobs(query: {
 
 export function getJob(jobId: string): Promise<Envelope<JobDetail>> {
   return request(`/api/v1/jobs/${encodeURIComponent(jobId)}`);
+}
+
+export function getJobErrors(
+  jobId: string,
+  query: { page: number; pageSize: number },
+): Promise<Envelope<JobError[]> & { meta: PageMeta }> {
+  const params = new URLSearchParams({
+    page: String(query.page),
+    page_size: String(query.pageSize),
+  });
+  return request(`/api/v1/jobs/${encodeURIComponent(jobId)}/errors?${params.toString()}`);
 }
 
 export function createJob(file: File, name: string): Promise<Envelope<JobCreated>> {

@@ -60,10 +60,13 @@ button:disabled {
   opacity: 0.55;
 }
 
-button.primary {
+button.primary,
+a.primary {
+  display: inline-block;
   background: var(--accent);
   border-color: transparent;
   color: var(--accent-text);
+  text-decoration: none;
 }
 
 button:focus-visible,
@@ -175,6 +178,16 @@ select {
 .message.error {
   background: var(--danger-bg);
   color: var(--danger);
+}
+
+.file-meta {
+  margin: 0;
+  color: var(--muted);
+}
+
+.raw-summary {
+  max-width: 18rem;
+  overflow-wrap: anywhere;
 }
 
 .message a {

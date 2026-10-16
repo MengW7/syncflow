@@ -26,6 +26,16 @@ export type JobCreated = {
   created_at: string;
 };
 
+export type JobError = {
+  job_id: string;
+  row_number: number | null;
+  field_name: string | null;
+  error_code: string;
+  error_message: string;
+  raw_row: Record<string, unknown> | null;
+  created_at: string;
+};
+
 export type PageMeta = {
   page: number;
   page_size: number;

@@ -1,6 +1,8 @@
 import { Link, Route, Routes } from "react-router-dom";
 
+import { CreateJobPage } from "./pages/CreateJobPage";
 import { JobDetailPage } from "./pages/JobDetailPage";
+import { JobErrorsPage } from "./pages/JobErrorsPage";
 import { JobListPage } from "./pages/JobListPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 
@@ -16,6 +18,8 @@ export default function App() {
       <main>
         <Routes>
           <Route path="/" element={<JobListPage />} />
+          <Route path="/jobs/new" element={<CreateJobPage />} />
+          <Route path="/jobs/:jobId/errors" element={<JobErrorsPage />} />
           <Route path="/jobs/:jobId" element={<JobDetailPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
