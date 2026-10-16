@@ -1,44 +1,25 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
-import { ApiError, getJob } from "../api/client";
-import type { JobDetail } from "../api/types";
 import { StatusBadge } from "../components/StatusBadge";
 import { formatLocalTime } from "../format";
+import { useJobPolling } from "../hooks/useJobPolling";
 
 export function JobDetailPage() {
   const { jobId = "" } = useParams();
-  const [job, setJob] = useState<JobDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<ApiError | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
+  const [attempt, setAttempt] = useState(0);
+  return (
+    <JobDetailBody
+      key={`${jobId}:${attempt}`}
+      jobId={jobId}
+      onRetry={() => setAttempt((value) => value + 1)}
+    />
+  );
+}
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    getJob(jobId)
-      .then((result) => {
-        if (!cancelled) {
-          setJob(result.data);
-        }
-      })
-      .catch((caught: unknown) => {
-        if (cancelled) {
-          return;
-        }
-        setJob(null);
-        setError(caught instanceof ApiError ? caught : new ApiError(0, "UNKNOWN", "加载任务失败"));
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [jobId, reloadKey]);
+function JobDetailBody({ jobId, onRetry }: { jobId: string; onRetry: () => void }) {
+  const { job, loading, error } = useJobPolling(jobId);
+  const showErrors = job !== null && (job.failed_records > 0 || job.status === "FAILED");
 
   if (loading) {
     return (
@@ -48,7 +29,7 @@ export function JobDetailPage() {
     );
   }
 
-  if (error?.status === 404) {
+  if (!job && error?.status === 404) {
     return (
       <section className="panel">
         <h1>任务不存在</h1>
@@ -58,7 +39,7 @@ export function JobDetailPage() {
     );
   }
 
-  if (error || !job) {
+  if (!job) {
     return (
       <section className="panel">
         <h1>无法加载任务</h1>
@@ -66,7 +47,7 @@ export function JobDetailPage() {
           {error?.message ?? "加载任务失败"}
         </p>
         <div className="actions">
-          <button type="button" onClick={() => setReloadKey((value) => value + 1)}>
+          <button type="button" onClick={onRetry}>
             重试
           </button>
           <Link to="/">返回列表</Link>
@@ -84,6 +65,14 @@ export function JobDetailPage() {
       <p>
         <Link to="/">返回列表</Link>
       </p>
+      {error ? (
+        <p className="message error" role="alert">
+          刷新失败：{error.message}
+        </p>
+      ) : null}
+      {job.status === "PENDING" || job.status === "RUNNING" ? (
+        <p className="message">正在处理，每 3 秒自动刷新。</p>
+      ) : null}
       <dl className="detail">
         <div>
           <dt>源文件名</dt>
@@ -122,6 +111,11 @@ export function JobDetailPage() {
           </dd>
         </div>
       </dl>
+      {showErrors ? (
+        <p className="actions">
+          <Link to={`/jobs/${job.id}/errors`}>查看错误明细</Link>
+        </p>
+      ) : null}
     </section>
   );
 }

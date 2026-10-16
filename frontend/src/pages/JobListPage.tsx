@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { ApiError, listJobs } from "../api/client";
-import type { JobCreated, JobListItem, PageMeta } from "../api/types";
-import { CreateJobForm } from "../components/CreateJobForm";
-import { JOB_STATUS_LABEL, StatusBadge } from "../components/StatusBadge";
+import type { JobListItem, PageMeta } from "../api/types";
+import { JOB_STATUS_LABEL } from "../components/jobStatusLabel";
+import { StatusBadge } from "../components/StatusBadge";
 import { formatLocalTime } from "../format";
 
 const PAGE_SIZE = 20;
@@ -25,52 +25,50 @@ export function JobListPage() {
   const status = params.get("status") ?? "";
   const page = readPage(params.get("page"));
   const statusKnown = status === "" || status in JOB_STATUS_LABEL;
-  const [items, setItems] = useState<JobListItem[]>([]);
-  const [meta, setMeta] = useState<PageMeta | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [created, setCreated] = useState<JobCreated | null>(null);
+  const queryError = page === null ? "页码不正确" : !statusKnown ? "不支持的任务状态" : "";
   const [reloadKey, setReloadKey] = useState(0);
+  const requestKey = `${status}:${page ?? "invalid"}:${reloadKey}`;
+  const [snapshot, setSnapshot] = useState<{
+    key: string;
+    items: JobListItem[];
+    meta: PageMeta | null;
+    error: string;
+  }>({ key: "", items: [], meta: null, error: "" });
+  const loading = !queryError && snapshot.key !== requestKey;
+  const items = loading ? [] : snapshot.items;
+  const meta = loading ? null : snapshot.meta;
+  const error = loading ? "" : snapshot.error;
 
   useEffect(() => {
-    if (page === null || !statusKnown) {
-      setLoading(false);
-      setItems([]);
-      setMeta(null);
-      setError(page === null ? "页码不正确" : "不支持的任务状态");
+    if (queryError || page === null) {
       return;
     }
 
+    const key = requestKey;
     let cancelled = false;
-    setLoading(true);
-    setError("");
     listJobs({ page, pageSize: PAGE_SIZE, status: status || undefined })
       .then((result) => {
         if (cancelled) {
           return;
         }
-        setItems(result.data);
-        setMeta(result.meta);
+        setSnapshot({ key, items: result.data, meta: result.meta, error: "" });
       })
       .catch((caught: unknown) => {
         if (cancelled) {
           return;
         }
-        setItems([]);
-        setMeta(null);
-        setError(caught instanceof ApiError ? caught.message : "加载任务失败");
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        setSnapshot({
+          key,
+          items: [],
+          meta: null,
+          error: caught instanceof ApiError ? caught.message : "加载任务失败",
+        });
       });
 
     return () => {
       cancelled = true;
     };
-  }, [page, status, statusKnown, reloadKey]);
+  }, [page, status, queryError, requestKey]);
 
   function updateQuery(next: { status?: string; page?: number }) {
     const query = new URLSearchParams(params);
@@ -91,35 +89,20 @@ export function JobListPage() {
     setParams(query);
   }
 
-  function handleCreated(job: JobCreated) {
-    setCreated(job);
-    setCreating(false);
-    setReloadKey((value) => value + 1);
-    updateQuery({ status: "", page: 1 });
-  }
-
   const total = meta?.total ?? 0;
   const currentPage = meta?.page ?? page ?? 1;
   const canPrev = currentPage > 1;
   const canNext = meta ? currentPage * PAGE_SIZE < total : false;
-  const showEmpty = !loading && !error && items.length === 0 && total === 0;
+  const showEmpty = !queryError && !loading && !error && items.length === 0 && total === 0;
 
   return (
     <section className="panel">
       <div className="panel-head">
         <h1>任务列表</h1>
-        <button type="button" className="primary" onClick={() => setCreating((open) => !open)}>
-          {creating ? "收起" : "创建任务"}
-        </button>
+        <Link className="primary" to="/jobs/new">
+          创建任务
+        </Link>
       </div>
-
-      {creating ? <CreateJobForm onCreated={handleCreated} /> : null}
-      {created ? (
-        <p className="message">
-          已创建任务「{created.name}」。
-          <Link to={`/jobs/${created.id}`}>查看详情</Link>
-        </p>
-      ) : null}
 
       <label className="filter">
         状态
@@ -135,32 +118,33 @@ export function JobListPage() {
         </select>
       </label>
 
-      {loading ? <p className="message">正在加载任务…</p> : null}
+      {!queryError && loading ? <p className="message">正在加载任务…</p> : null}
 
-      {!loading && error ? (
+      {queryError || (!loading && error) ? (
         <div className="message error" role="alert">
-          <p>{error}</p>
-          <button type="button" onClick={() => setReloadKey((value) => value + 1)}>
-            重试
-          </button>
-          {!statusKnown || page === null ? (
+          <p>{queryError || error}</p>
+          {queryError ? (
             <button type="button" onClick={() => updateQuery({ status: "", page: 1 })}>
               回到第一页
             </button>
-          ) : null}
+          ) : (
+            <button type="button" onClick={() => setReloadKey((value) => value + 1)}>
+              重试
+            </button>
+          )}
         </div>
       ) : null}
 
       {showEmpty ? (
         <div className="empty">
           <p>还没有任务。</p>
-          <button type="button" className="primary" onClick={() => setCreating(true)}>
+          <Link className="primary" to="/jobs/new">
             创建任务
-          </button>
+          </Link>
         </div>
       ) : null}
 
-      {!loading && !error && items.length > 0 ? (
+      {!queryError && !loading && !error && items.length > 0 ? (
         <div className="table-wrap">
           <table className="job-table">
             <thead>
@@ -197,11 +181,11 @@ export function JobListPage() {
         </div>
       ) : null}
 
-      {!loading && !error && total > 0 && items.length === 0 ? (
+      {!queryError && !loading && !error && total > 0 && items.length === 0 ? (
         <p className="message">这一页没有任务。</p>
       ) : null}
 
-      {!loading && !error && total > 0 ? (
+      {!queryError && !loading && !error && total > 0 ? (
         <div className="pager">
           <button type="button" disabled={!canPrev} onClick={() => updateQuery({ page: currentPage - 1 })}>
             上一页
